@@ -7,7 +7,7 @@
  * http://www.eclipse.org/legal/epl-v10.html
  */
 package org.openhab.binding.upb.handler;
-
+import org.eclipse.smarthome.config.core.Configuration;
 import org.eclipse.smarthome.core.library.types.OnOffType;
 import org.eclipse.smarthome.core.library.types.PercentType;
 import org.eclipse.smarthome.core.thing.Channel;
@@ -32,8 +32,8 @@ import org.slf4j.LoggerFactory;
  * @since 2.2.0
  *
  */
-public abstract class UPBBaseHandler extends BaseThingHandler implements UPBMessageListener {
-
+public abstract class UPBBaseHandler extends BaseThingHandler implements UPBMessageListener 
+{
     private final Logger logger = LoggerFactory.getLogger(UPBBaseHandler.class);
 
     private StateConverter stateConverter = new StateConverter();
@@ -45,61 +45,91 @@ public abstract class UPBBaseHandler extends BaseThingHandler implements UPBMess
      *
      * @param thing the thing to be handled
      */
-    public UPBBaseHandler(Thing thing) {
+    public UPBBaseHandler(Thing thing) 
+    {
         super(thing);
     }
 
     @Override
-    public void initialize() {
-        this.id = ((Number) getConfig().get(UPBBindingConstants.DEVICE_ID)).byteValue();
+    public void initialize() 
+    {
+        Configuration currentConfig = getConfig();
+        this.id = ((Number) currentConfig.get(UPBBindingConstants.DEVICE_ID)).byteValue();
 
         super.initialize();
     }
 
     @Override
-    public void handleCommand(ChannelUID channelUID, Command command) {
+    public void handleCommand(ChannelUID channelUID, Command command) 
+    {
+      try
+      {
         byte[] commandBytes = getCommandBytes(channelUID, command);
 
-        if (messageSender == null) {
+        if (messageSender == null) 
+        {
             logger.warn("messageSender is null, command ignored");
             return;
         }
 
-        if (commandBytes == null) {
+        if (commandBytes == null) 
+        {
             logger.warn("Failed to interpret command [{}]", command);
             return;
         }
 
         MessageBuilder message = MessageBuilder.create().destination(getId()).link(isLink()).command(commandBytes);
 
-        if (command == RefreshType.REFRESH) {
+        if (command instanceof RefreshType) 
+        {
             message.priority(UPBMessage.Priority.LOW);
+        }
+        else
+        {
+            message.priority(UPBMessage.Priority.NORMAL);
         }
 
         messageSender.sendMessage(message);
+      }
+      catch (Exception e)
+      {
+        logger.error("UPBBaseHandler handleCommand error : " + e.getMessage());
+      }
     }
 
     @Override
-    public void messageReceived(UPBMessage message) {
-        if (message.getDestination() != getId() && message.getSource() != getId()) {
+    public void messageReceived(UPBMessage message) 
+    {
+      try
+      {
+        if (message.getDestination() != getId() && message.getSource() != getId()) 
+        {
             return;
         }
 
-        if (message.getControlWord().isLink() != isLink()) {
+        if (message.getControlWord().isLink() != isLink()) 
+        {
             return;
         }
 
         updateStatus(ThingStatus.ONLINE);
 
         // parse status
-        for (Channel c : getThing().getChannels()) {
+        for (Channel c : getThing().getChannels()) 
+        {
             State newState = stateConverter.convert(message, c.getUID().getId());
 
-            if (newState != null) {
+            if (newState != null) 
+            {
                 updateState(c.getUID(), newState);
                 break;
             }
         }
+      }
+      catch (Exception e)
+      {
+        logger.error("UPBBaseHandler messageReceived error : " + e.getMessage());
+      }
     }
 
     /**
@@ -109,24 +139,40 @@ public abstract class UPBBaseHandler extends BaseThingHandler implements UPBMess
      * @param command the command to convert to byte form
      * @return an array of bytes to send to the UPB modem, or null if the command could not be converted
      */
-    protected byte[] getCommandBytes(ChannelUID channelUID, Command command) {
-        byte[] commandByte = null;
+    protected byte[] getCommandBytes(ChannelUID channelUID, Command command) 
+    {
+      byte[] commandByte = null;
 
-        if (command == OnOffType.ON) {
+      try
+      {
+        if (command == OnOffType.ON) 
+        {
             commandByte = new byte[] { UPBMessage.Command.ACTIVATE.toByte() };
-        } else if (command == OnOffType.OFF) {
+        } 
+        else if (command == OnOffType.OFF) 
+        {
             commandByte = new byte[] { UPBMessage.Command.DEACTIVATE.toByte() };
-        } else if (command instanceof PercentType) {
+        } 
+        else if (command instanceof PercentType) 
+        {
             commandByte = new byte[] { UPBMessage.Command.GOTO.toByte(), ((PercentType) command).byteValue() };
-        } else if (command == RefreshType.REFRESH && !isLink()) {
+        } 
+        else if (command instanceof RefreshType) 
+        {
             commandByte = new byte[] { UPBMessage.Command.REPORT_STATE.toByte() };
         }
-
-        return commandByte;
+      }
+      catch (Exception e)
+      {
+        logger.error("UPBBaseHandler getCommandBytes error : " + e.getMessage());
+      }
+       
+      return commandByte;
     }
 
     @Override
-    public void setMessageSender(UPBMessageSender messageSender) {
+    public void setMessageSender(UPBMessageSender messageSender) 
+    {
         this.messageSender = messageSender;
     }
 
@@ -135,7 +181,8 @@ public abstract class UPBBaseHandler extends BaseThingHandler implements UPBMess
      *
      * @return true if this handler represents a link; false otherwise.
      */
-    protected boolean isLink() {
+    protected boolean isLink() 
+    {
         return false;
     }
 
@@ -144,7 +191,8 @@ public abstract class UPBBaseHandler extends BaseThingHandler implements UPBMess
      *
      * @return the UPB identifier for the thing being handled by this handler
      */
-    protected byte getId() {
+    protected byte getId() 
+    {
         return id;
     }
 }
