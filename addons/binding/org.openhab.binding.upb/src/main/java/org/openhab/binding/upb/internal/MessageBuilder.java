@@ -9,15 +9,18 @@
 package org.openhab.binding.upb.internal;
 
 import javax.xml.bind.DatatypeConverter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Builder class for building UPB messages.
  *
- * @author Chris Van Orman
+ * @author Chris Van Orman, Dustin Gerold
  * @since 1.9.0
  */
-public final class MessageBuilder {
-
+public final class MessageBuilder 
+{
+    private final Logger logger = LoggerFactory.getLogger(MessageBuilder.class);
     private byte network;
     private byte source = -1;
     private byte destination;
@@ -30,11 +33,13 @@ public final class MessageBuilder {
      *
      * @return a new MessageBuilder.
      */
-    public static MessageBuilder create() {
+    public static MessageBuilder create() 
+    {
         return new MessageBuilder();
     }
 
-    private MessageBuilder() {
+    private MessageBuilder() 
+    {
 
     }
 
@@ -44,7 +49,8 @@ public final class MessageBuilder {
      * @param priority the priority to set.
      * @return the same MessageBuilder instance.
      */
-    public MessageBuilder priority(UPBMessage.Priority priority) {
+    public MessageBuilder priority(UPBMessage.Priority priority) 
+    {
         this.priority = priority;
         return this;
     }
@@ -54,7 +60,8 @@ public final class MessageBuilder {
      *
      * @return the priority
      */
-    public UPBMessage.Priority getPriority() {
+    public UPBMessage.Priority getPriority() 
+    {
         return this.priority;
     }
 
@@ -65,7 +72,8 @@ public final class MessageBuilder {
      *            set to true if this message is for a link.
      * @return the same MessageBuilder instance.
      */
-    public MessageBuilder link(boolean link) {
+    public MessageBuilder link(boolean link) 
+    {
         this.link = link;
         return this;
     }
@@ -77,7 +85,8 @@ public final class MessageBuilder {
      *            the network of the message.
      * @return the same MessageBuilder instance.
      */
-    public MessageBuilder network(byte network) {
+    public MessageBuilder network(byte network) 
+    {
         this.network = network;
         return this;
     }
@@ -89,7 +98,8 @@ public final class MessageBuilder {
      *            the source if of the message.
      * @return the same MessageBuilder instance.
      */
-    public MessageBuilder source(byte source) {
+    public MessageBuilder source(byte source) 
+    {
         this.source = source;
         return this;
     }
@@ -101,7 +111,8 @@ public final class MessageBuilder {
      *            the destination id.
      * @return the same MessageBuilder instance.
      */
-    public MessageBuilder destination(byte destination) {
+    public MessageBuilder destination(byte destination) 
+    {
         this.destination = destination;
         return this;
     }
@@ -113,7 +124,8 @@ public final class MessageBuilder {
      *            the command followed by any arguments.
      * @return the same MessageBuilder instance.
      */
-    public MessageBuilder command(byte... commands) {
+    public MessageBuilder command(byte... commands) 
+    {
         this.commands = commands;
         return this;
     }
@@ -123,9 +135,13 @@ public final class MessageBuilder {
      *
      * @return a HEX string of the message.
      */
-    public String build() {
-        ControlWord controlWord = new ControlWord();
-
+    public String build() 
+    {
+      ControlWord controlWord = new ControlWord();
+      byte[] bytes = null;
+     
+      try
+      {
         int packetLength = 6 + commands.length;
 
         controlWord.setPacketLength(packetLength);
@@ -133,7 +149,7 @@ public final class MessageBuilder {
         controlWord.setLink(link);
 
         int index = 2;
-        byte[] bytes = new byte[packetLength];
+        bytes = new byte[packetLength];
         bytes[index++] = network;
         bytes[index++] = destination;
         bytes[index++] = source;
@@ -147,12 +163,19 @@ public final class MessageBuilder {
         // Calculate the checksum
         // The checksum is the 2's complement of the sum.
         int sum = 0;
-        for (byte b : bytes) {
+
+        for (byte b : bytes) 
+        {
             sum += b;
         }
 
         bytes[bytes.length - 1] = new Integer(-sum >>> 0).byteValue();
+      }
+      catch (Exception e)
+      {
+        logger.error("MessageBuilder build error : " + e.getMessage());
+      }
 
-        return DatatypeConverter.printHexBinary(bytes);
+      return DatatypeConverter.printHexBinary(bytes);
     }
 }
