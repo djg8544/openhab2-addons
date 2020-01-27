@@ -10,10 +10,14 @@ package org.openhab.binding.upb.internal;
 
 import java.io.IOException;
 import java.io.InputStream;
+import gnu.io.SerialPortEvent;
+import gnu.io.SerialPortEventListener;
+import gnu.io.SerialPort;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashSet;
+import java.util.TooManyListenersException;
 
 import org.apache.commons.lang.ArrayUtils;
 import org.slf4j.Logger;
@@ -24,10 +28,11 @@ import org.slf4j.LoggerFactory;
  * asynchronously. When messages are received, they are broadcast to all
  * subscribed {@link Listener listeners}.
  *
- * @author Chris Van Orman
+ * @author Chris Van Orman, Dustin Gerold
  * @since 1.9.0
  */
-public class UPBReader implements Runnable {
+public class UPBReader implements SerialPortEventListener 
+{
 
     /**
      * Listener class for handling received messages. A listener can be added by
@@ -36,7 +41,8 @@ public class UPBReader implements Runnable {
      * @author cvanorman
      *
      */
-    public interface Listener {
+    public interface Listener 
+    {
 
         /**
          * Called whenever a message has been received from the UPB modem.
@@ -54,6 +60,7 @@ public class UPBReader implements Runnable {
     private int bufferLength = 0;
     private InputStream inputStream;
     private Thread thread;
+    private SerialPort serialPort;
 
     /**
      * Instantiates a new {@link UPBReader}.
@@ -61,11 +68,24 @@ public class UPBReader implements Runnable {
      * @param inputStream
      *            the inputStream from the UPB modem.
      */
-    public UPBReader(InputStream inputStream) {
-        this.inputStream = inputStream;
+    public UPBReader(SerialPort tmpSerialPort) 
+    {
+      try
+      {
+        serialPort = tmpSerialPort;
+        inputStream = serialPort.getInputStream();
 
-        thread = new Thread(this);
-        thread.start();
+        serialPort.addEventListener(this);
+        serialPort.notifyOnDataAvailable(true);
+      }
+      catch (IOException e) 
+      {
+          logger.error("UPBReader error : " + e.getMessage());
+      }
+      catch (TooManyListenersException e) 
+      {
+          logger.error("UPBReader error : " + e.getMessage());
+      }
     }
 
     /**
@@ -74,7 +94,8 @@ public class UPBReader implements Runnable {
      * @param listener
      *            the listener to add.
      */
-    public synchronized void addListener(Listener listener) {
+    public synchronized void addListener(Listener listener) 
+    {
         listeners.add(listener);
     }
 
@@ -84,7 +105,8 @@ public class UPBReader implements Runnable {
      * @param listener
      *            the listener to remove.
      */
-    public synchronized void removeListener(Listener listener) {
+    public synchronized void removeListener(Listener listener) 
+    {
         listeners.remove(listener);
     }
 
@@ -96,9 +118,12 @@ public class UPBReader implements Runnable {
      * @param length
      *            the length of data to add.
      */
-    private void addData(byte[] data, int length) {
-
-        if (bufferLength + length > buffer.length) {
+    private void addData(byte[] data, int length) 
+    {
+      try
+      {
+        if (bufferLength + length > buffer.length) 
+        {
             // buffer overflow discard entire buffer
             bufferLength = 0;
         }
@@ -108,84 +133,178 @@ public class UPBReader implements Runnable {
         bufferLength += length;
 
         interpretBuffer();
+      }
+      catch (Exception e) 
+      {
+          logger.error("sddData error : " + e.getMessage());
+      }
     }
 
     /**
      * Shuts the reader down.
      */
-    public void shutdown() {
-        if (thread != null) {
-            thread.interrupt();
-        }
+    public void shutdown() 
+    {
+      try
+      {
+        serialPort.notifyOnDataAvailable(false);
+        serialPort.removeEventListener();
 
-        try {
+        try 
+        {
+          if (inputStream != null)
+          {
             inputStream.close();
-        } catch (IOException e) {
+          }
+        } 
+        catch (IOException e) 
+        {
+          logger.error("UPBReader shutdown ioerror : " + e.getMessage());
         }
+      }
+      catch (Exception e) 
+      {
+        logger.error("UPBReader shutdown error : " + e.getMessage());
+      }
+    
+      logger.debug("UPBReader shutdown.");
     }
 
-    private int findMessageLength(byte[] buffer, int bufferLength) {
-        int messageLength = ArrayUtils.INDEX_NOT_FOUND;
+    private int findMessageLength(byte[] buffer, int bufferLength) 
+    {
+      int messageLength = ArrayUtils.INDEX_NOT_FOUND;
 
-        for (int i = 0; i < bufferLength; i++) {
-            if (buffer[i] == 13) {
+      try
+      {        
+        for (int i = 0; i < bufferLength; i++) 
+        {
+            if (buffer[i] == 13) 
+            {
                 messageLength = i;
                 break;
             }
         }
-
+      }
+      catch (Exception e) 
+      {
+        logger.error("findMessageLength error : " + e.getMessage());
+      }
         return messageLength;
     }
 
     /**
      * Attempts to interpret any messages that may be contained in the buffer.
      */
-    private void interpretBuffer() {
-        int messageLength = findMessageLength(buffer, bufferLength);
-
-        while (messageLength != ArrayUtils.INDEX_NOT_FOUND) {
+    private void interpretBuffer() 
+    {
+      int messageLength = findMessageLength(buffer, bufferLength);
+      
+      try
+      {
+        while (messageLength != ArrayUtils.INDEX_NOT_FOUND) 
+        {
             String message = new String(Arrays.copyOfRange(buffer, 0, messageLength));
             logger.debug("UPB Message: {}", message);
 
             int remainingBuffer = bufferLength - messageLength - 1;
 
-            if (remainingBuffer > 0) {
+            if (remainingBuffer > 0) 
+            {
                 System.arraycopy(buffer, messageLength + 1, buffer, 0, remainingBuffer);
             }
+
             bufferLength = remainingBuffer;
 
             notifyListeners(UPBMessage.fromString(message));
 
             messageLength = findMessageLength(buffer, bufferLength);
         }
+      }
+      catch (Exception e) 
+      {
+        logger.error("interpretBuffer error : " + e.getMessage());
+      }
     }
 
-    private synchronized void notifyListeners(UPBMessage message) {
-        for (Listener l : new ArrayList<>(listeners)) {
+    private synchronized void notifyListeners(UPBMessage message) 
+    {
+        for (Listener l : new ArrayList<>(listeners)) 
+        {
             l.messageReceived(message);
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void run() {
-        logger.debug("Starting modem monitoring.");
-        byte[] buffer = new byte[32];
-        try {
-            for (int len = -1; (len = inputStream.read(buffer)) >= 0;) {
-                if (len > 0) {
-                    logger.debug("Received: {}", ArrayUtils.subarray(buffer, 0, len));
+    public void serialEvent(SerialPortEvent event) 
+    {
+      try
+      {
+        switch(event.getEventType()) 
+        {
+          case SerialPortEvent.BI:
+            logger.debug("SerialPortEvent.BI occurred");
+            break;
+
+          case SerialPortEvent.OE:
+            logger.debug("SerialPortEvent.OE occurred");
+            break;
+
+          case SerialPortEvent.FE:
+            logger.debug("SerialPortEvent.FE occurred");
+            break;
+
+          case SerialPortEvent.PE:
+            logger.debug("SerialPortEvent.PE occurred");
+            break;
+
+          case SerialPortEvent.CD:
+            logger.debug("SerialPortEvent.CD occurred");
+            break;
+
+          case SerialPortEvent.CTS:
+            logger.debug("SerialPortEvent.CTS occurred");
+            break;
+
+          case SerialPortEvent.DSR:
+            logger.debug("SerialPortEvent.DSR occurred");
+            break;
+
+          case SerialPortEvent.RI:
+            logger.debug("SerialPortEvent.RI occurred");
+            break;
+
+          case SerialPortEvent.OUTPUT_BUFFER_EMPTY:
+            logger.debug("SerialPortEvent.OUTPUT_BUFFER_EMPTY occurred");
+            break;
+
+          case SerialPortEvent.DATA_AVAILABLE:
+            byte[] readBuffer = new byte[32];
+            int numBytes = 0;
+
+            try 
+            {
+                while (inputStream.available() > 0) 
+                {
+                  numBytes = inputStream.read(readBuffer);
+
+                  if (numBytes > 0) 
+                  {
+                    logger.debug("Received: {}", ArrayUtils.subarray(readBuffer, 0, numBytes));
+
+                    addData(readBuffer, numBytes);
+                  }
                 }
-                addData(buffer, len);
-                if (Thread.interrupted()) {
-                    break;
-                }
+            } 
+            catch (IOException e) 
+            {
+               logger.error("SerialPortEvent error : " + e.getMessage());
             }
-        } catch (Exception e) {
-            logger.debug("Failed to read input stream.", e);
+
+            break;
         }
-        logger.debug("UPBReader stopped.");
+      }
+      catch (Exception e) 
+      {
+        logger.error("serialEvent error : " + e.getMessage());
+      }
     }
 }
