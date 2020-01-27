@@ -40,11 +40,11 @@ import gnu.io.UnsupportedCommOperationException;
  * Handler for Universal Powerline Bus (UPB) that reads and writes messages to
  * and from the UPB modem.
  *
- * @author Chris Van Orman
+ * @author Chris Van Orman, Dustin Gerold
  * @since 1.9.0
  */
-public class UPBBridgeHandler extends BaseBridgeHandler implements UPBMessageSender, UPBReader.Listener {
-
+public class UPBBridgeHandler extends BaseBridgeHandler implements UPBMessageSender, UPBReader.Listener 
+{
     private static final String CONFIG_NETWORK = "network";
     private static final String CONFIG_PORT = "serialPort";
 
@@ -62,13 +62,14 @@ public class UPBBridgeHandler extends BaseBridgeHandler implements UPBMessageSen
      * 
      * @param bridge the bridge to be handled
      */
-    public UPBBridgeHandler(Bridge bridge) {
+    public UPBBridgeHandler(Bridge bridge) 
+    {
         super(bridge);
     }
 
     @Override
-    public void initialize() {
-
+    public void initialize() 
+    {
         // Read necessary config values
         this.network = ((Number) getConfig().get(CONFIG_NETWORK)).byteValue();
         this.port = (String) getConfig().get(CONFIG_PORT);
@@ -77,14 +78,17 @@ public class UPBBridgeHandler extends BaseBridgeHandler implements UPBMessageSen
         logger.debug("Serial port: {}", port);
         logger.debug("UPB Network: {}", network & 0xff);
 
-        try {
+        try 
+        {
             serialPort = openSerialPort();
-            upbReader = new UPBReader(new DataInputStream(serialPort.getInputStream()));
+            upbReader = new UPBReader(serialPort);
             upbWriter = new UPBWriter(new DataOutputStream(serialPort.getOutputStream()), upbReader);
 
             upbReader.addListener(this);
             updateStatus(ThingStatus.ONLINE);
-        } catch (Exception e) {
+        } 
+        catch (Exception e) 
+        {
             logger.error("Error opening serial port [{}].", port, e);
 
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Error opening serial port.");
@@ -92,45 +96,61 @@ public class UPBBridgeHandler extends BaseBridgeHandler implements UPBMessageSen
     }
 
     @Override
-    public void dispose() {
-        if (upbReader != null) {
+    public void dispose() 
+    {
+        if (upbReader != null) 
+        {
             upbReader.shutdown();
         }
 
-        if (upbWriter != null) {
+        if (upbWriter != null) 
+        {
             upbWriter.shutdown();
         }
 
-        if (serialPort != null) {
+        if (serialPort != null) 
+        {
             logger.debug("Closing serial port");
             serialPort.close();
         }
     }
 
-    private SerialPort openSerialPort() {
+    private SerialPort openSerialPort() 
+    {
         SerialPort serialPort = null;
         CommPortIdentifier portId;
-        try {
+
+        try 
+        {
             portId = CommPortIdentifier.getPortIdentifier(port);
-        } catch (NoSuchPortException e1) {
+        } 
+        catch (NoSuchPortException e1) 
+        {
             String ports = StringUtils.join(findAvailablePorts(), ", ");
-            throw new RuntimeException(
-                    String.format("Port [%s] does not exist. Found the following ports: [%s].", port, ports), e1);
+            throw new RuntimeException(String.format("Port [%s] does not exist. Found the following ports: [%s].", port, ports), e1);
         }
 
-        if (portId.getPortType() == CommPortIdentifier.PORT_SERIAL) {
-            if (portId.getName().equals(port)) {
-                try {
-                    serialPort = portId.open("UPB", 1000);
-                } catch (PortInUseException e) {
+        if (portId.getPortType() == CommPortIdentifier.PORT_SERIAL) 
+        {
+            if (portId.getName().equals(port)) 
+            {
+                try 
+                {
+                    serialPort = (SerialPort) portId.open("UPB", 1000);
+                } 
+                catch (PortInUseException e) 
+                {
                     throw new RuntimeException("Port is in use", e);
                 }
-                try {
-                    serialPort.setSerialPortParams(4800, SerialPort.DATABITS_8, SerialPort.STOPBITS_1,
-                            SerialPort.PARITY_NONE);
+
+                try 
+                {
+                    serialPort.setSerialPortParams(4800, SerialPort.DATABITS_8, SerialPort.STOPBITS_1, SerialPort.PARITY_NONE);
                     serialPort.setFlowControlMode(SerialPort.FLOWCONTROL_NONE);
                     serialPort.enableReceiveTimeout(100);
-                } catch (UnsupportedCommOperationException e) {
+                } 
+                catch (UnsupportedCommOperationException e) 
+                {
                     throw new RuntimeException("Failed to configure serial port", e);
                 }
             }
@@ -139,13 +159,14 @@ public class UPBBridgeHandler extends BaseBridgeHandler implements UPBMessageSen
         return serialPort;
     }
 
-    private List<String> findAvailablePorts() {
+    private List<String> findAvailablePorts() 
+    {
         @SuppressWarnings("unchecked")
         Enumeration<CommPortIdentifier> ports = CommPortIdentifier.getPortIdentifiers();
-
         List<String> portNames = new ArrayList<>();
 
-        while (ports.hasMoreElements()) {
+        while (ports.hasMoreElements()) 
+        {
             CommPortIdentifier port = ports.nextElement();
             portNames.add(port.getName());
         }
@@ -154,37 +175,46 @@ public class UPBBridgeHandler extends BaseBridgeHandler implements UPBMessageSen
     }
 
     @Override
-    public void handleCommand(ChannelUID channelUID, org.eclipse.smarthome.core.types.Command command) {
+    public void handleCommand(ChannelUID channelUID, org.eclipse.smarthome.core.types.Command command) 
+    {
         // Bridge does not support commands.
     }
 
     @Override
-    public void childHandlerInitialized(ThingHandler childHandler, Thing childThing) {
-        if (childHandler instanceof UPBMessageListener) {
-            listeners.add((UPBMessageListener) childHandler);
-            ((UPBMessageListener) childHandler).setMessageSender(this);
+    public void childHandlerInitialized(ThingHandler childHandler, Thing childThing) 
+    {
+        if (childHandler instanceof UPBMessageListener) 
+        {
+          listeners.add((UPBMessageListener) childHandler);
+          ((UPBMessageListener) childHandler).setMessageSender(this);
         }
     }
 
     @Override
-    public void childHandlerDisposed(ThingHandler childHandler, Thing childThing) {
+    public void childHandlerDisposed(ThingHandler childHandler, Thing childThing) 
+    {
         listeners.remove(childHandler);
 
-        if (childHandler instanceof UPBMessageListener) {
-            ((UPBMessageListener) childHandler).setMessageSender(null);
+        if (childHandler instanceof UPBMessageListener) 
+        {
+          ((UPBMessageListener) childHandler).setMessageSender(null);
         }
     }
 
     @Override
-    public void sendMessage(MessageBuilder message) {
-        if (upbWriter != null) {
-            upbWriter.queueMessage(message.network(network));
+    public void sendMessage(MessageBuilder message) 
+    {
+        if (upbWriter != null) 
+        {
+          upbWriter.queueMessage(message.network(network));
         }
     }
 
     @Override
-    public void messageReceived(UPBMessage message) {
-        for (UPBMessageListener listener : listeners) {
+    public void messageReceived(UPBMessage message) 
+    {
+        for (UPBMessageListener listener : listeners) 
+        {
             listener.messageReceived(message);
         }
     }
