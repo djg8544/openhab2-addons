@@ -204,9 +204,11 @@ public class UPBBridgeHandler extends BaseBridgeHandler implements UPBMessageSen
     @Override
     public void sendMessage(MessageBuilder message) 
     {
+        message = message.network(network);
+
         if (upbWriter != null) 
         {
-          upbWriter.queueMessage(message.network(network));
+          upbWriter.queueMessage(message);
         }
     }
 
